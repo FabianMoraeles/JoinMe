@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -22,24 +22,28 @@ const NOTIFICATION_LABELS: Record<keyof NotificationSettings, string> = {
 
 export default function ProfileScreen() {
   const activatedProfile = useAuthStore((state) => state.activatedProfile) as ProfileKey;
-  const activeProfile = useAuthStore((state) => state.activeProfile);
-  const setActiveProfile = useAuthStore((state) => state.setActiveProfile);
   const revokeDevice = useAuthStore((state) => state.revokeDevice);
 
   const { data: couple } = useCouple();
   const { mutate: updateCouple } = useUpdateCouple();
-  const { data: notificationSettings } = useNotificationSettings(activeProfile);
-  const { mutate: updateNotificationSetting } = useUpdateNotificationSetting(activeProfile);
+  const { data: notificationSettings } = useNotificationSettings();
+  const { mutate: updateNotificationSetting } = useUpdateNotificationSetting();
 
   const [coupleName, setCoupleName] = useState(couple?.name ?? '');
+  const [isRevoking, setIsRevoking] = useState(false);
 
   useEffect(() => {
     if (couple) setCoupleName(couple.name);
   }, [couple]);
 
-  function handleRevoke() {
-    revokeDevice();
-    router.replace('/(activation)');
+  async function handleRevoke() {
+    setIsRevoking(true);
+    try {
+      await revokeDevice();
+      router.replace('/(activation)');
+    } finally {
+      setIsRevoking(false);
+    }
   }
 
   return (
@@ -76,7 +80,7 @@ export default function ProfileScreen() {
 
         <View className="gap-space-sm">
           <Text className="font-jakarta-bold text-label-sm uppercase tracking-wider text-on-surface-variant">
-            Notificaciones {activeProfile === activatedProfile ? '' : `(vista de ${PROFILES[activeProfile].displayName})`}
+            Notificaciones
           </Text>
           <View className="gap-1 rounded-lg bg-surface-container-lowest p-space-sm shadow-sm">
             {notificationSettings &&
@@ -94,38 +98,12 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View className="gap-space-sm">
-          <Text className="font-jakarta-bold text-label-sm uppercase tracking-wider text-on-surface-variant">
-            Modo desarrollador · previsualizar como
-          </Text>
-          <Text className="font-jakarta text-body-sm text-on-surface-variant">
-            Este teléfono está activado como {PROFILES[activatedProfile].displayName}. Usa esto solo para probar el
-            flujo de puntuación desde el otro lado sin necesidad de un segundo teléfono.
-          </Text>
-          <View className="flex-row gap-space-sm">
-            {(['yesica', 'fabian'] as ProfileKey[]).map((key) => {
-              const active = key === activeProfile;
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setActiveProfile(key)}
-                  className={`flex-1 flex-row items-center gap-space-sm rounded-lg p-space-md ${
-                    active ? 'bg-primary-fixed' : 'bg-surface-container-lowest'
-                  }`}
-                >
-                  <Avatar uri={PROFILES[key].avatarUrl} size={36} ringed={active} />
-                  <Text className="font-jakarta-semibold text-label-lg text-on-surface">{PROFILES[key].displayName}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
         <PrimaryButton
           label={`Revocar este dispositivo (${PROFILES[activatedProfile].displayName})`}
           icon="phonelink-erase"
           variant="ghost"
           onPress={handleRevoke}
+          loading={isRevoking}
         />
         <Text className="text-center font-jakarta text-body-sm text-on-surface-variant">
           Revocar no borra recuerdos ni perfiles — {PROFILES[partnerOf(activatedProfile)].displayName} sigue teniendo

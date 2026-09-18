@@ -1,13 +1,14 @@
-import type { ComponentProps } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Pill } from '@/components/ui/pill';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { uploadExperiencePhoto } from '@/features/experiences/photos';
 import {
   useAddPhoto,
   useCategories,
@@ -17,24 +18,27 @@ import {
   useRemovePhoto,
   useRevertPlanToIdea,
   useSetCoverPhoto,
+  useSignedPhotoUrl,
   useUpdateExperience,
 } from '@/features/experiences/use-experiences';
-import { getRatingStatus } from '@/features/experiences/types';
+import { getRatingStatus, type ExperiencePhoto } from '@/features/experiences/types';
 import { colors } from '@/theme/colors';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 export default function ExperienceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const activeProfile = useAuthStore((state) => state.activeProfile);
+  const coupleId = useAuthStore((state) => state.coupleId);
+  const activatedProfileId = useAuthStore((state) => state.activatedProfileId);
   const { data: experience } = useExperience(id);
   const { data: place } = usePlace(experience?.placeId);
   const { data: categories } = useCategories();
   const { mutate: discardIdea } = useDiscardIdea();
   const { mutate: revertPlanToIdea } = useRevertPlanToIdea();
   const { mutate: updateExperience } = useUpdateExperience();
-  const { mutate: addPhoto } = useAddPhoto(id);
-  const { mutate: removePhoto } = useRemovePhoto(id);
+  const { mutateAsync: addPhoto } = useAddPhoto(id);
+  const { mutate: removePhoto } = useRemovePhoto();
   const { mutate: setCoverPhoto } = useSetCoverPhoto(id);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
   if (!experience) return null;
 
@@ -43,11 +47,29 @@ export default function ExperienceDetailScreen() {
   async function handleAddPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.6,
       allowsMultipleSelection: true,
     });
-    if (result.canceled) return;
-    result.assets.forEach((asset) => addPhoto({ uri: asset.uri, uploadedBy: activeProfile }));
+    if (result.canceled || !coupleId || !activatedProfileId) return;
+
+    setUploadProgress({ current: 0, total: result.assets.length });
+    try {
+      for (let i = 0; i < result.assets.length; i++) {
+        const asset = result.assets[i];
+        setUploadProgress({ current: i + 1, total: result.assets.length });
+        const storagePath = await uploadExperiencePhoto({
+          localUri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          coupleId,
+          experienceId: id,
+        });
+        await addPhoto({ storagePath, uploadedBy: activatedProfileId });
+      }
+    } catch (error) {
+      Alert.alert('No se pudo subir la foto', error instanceof Error ? error.message : 'Intenta de nuevo.');
+    } finally {
+      setUploadProgress(null);
+    }
   }
 
   return (
@@ -57,34 +79,32 @@ export default function ExperienceDetailScreen() {
         <View className="gap-space-sm">
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-space-sm">
             {experience.photos.map((photo) => (
-              <View key={photo.id} className="relative h-32 w-32 overflow-hidden rounded-lg">
-                <Image source={{ uri: photo.uri }} style={{ width: 128, height: 128 }} contentFit="cover" />
-                {photo.id === experience.coverPhotoId ? (
-                  <View className="absolute left-1 top-1 rounded-full bg-primary-fixed px-1.5 py-0.5">
-                    <Text className="font-jakarta-semibold text-label-sm text-on-primary-fixed">Portada</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => setCoverPhoto(photo.id)}
-                    className="absolute left-1 top-1 rounded-full bg-surface-container-lowest/90 px-1.5 py-0.5"
-                  >
-                    <Text className="font-jakarta-semibold text-label-sm text-on-surface-variant">Usar de portada</Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  onPress={() => removePhoto(photo.id)}
-                  className="absolute right-1 top-1 h-6 w-6 items-center justify-center rounded-full bg-surface-container-lowest/90"
-                >
-                  <MaterialIcons name="close" size={14} color={colors.error} />
-                </Pressable>
-              </View>
+              <PhotoThumbnail
+                key={photo.id}
+                photo={photo}
+                isCover={photo.id === experience.coverPhotoId}
+                onSetCover={() => setCoverPhoto(photo.id)}
+                onRemove={() => removePhoto(photo.id)}
+              />
             ))}
             <Pressable
               onPress={handleAddPhoto}
+              disabled={!!uploadProgress}
               className="h-32 w-32 items-center justify-center rounded-lg border-2 border-dashed border-outline-variant bg-surface-container-lowest"
             >
-              <MaterialIcons name="add-a-photo" size={24} color={colors.outline} />
-              <Text className="mt-1 font-jakarta-semibold text-label-sm text-on-surface-variant">Añadir foto</Text>
+              {uploadProgress ? (
+                <>
+                  <ActivityIndicator color={colors.primary} />
+                  <Text className="mt-1 font-jakarta-semibold text-label-sm text-on-surface-variant">
+                    Subiendo {uploadProgress.current} de {uploadProgress.total}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="add-a-photo" size={24} color={colors.outline} />
+                  <Text className="mt-1 font-jakarta-semibold text-label-sm text-on-surface-variant">Añadir foto</Text>
+                </>
+              )}
             </Pressable>
           </ScrollView>
         </View>
@@ -151,12 +171,49 @@ export default function ExperienceDetailScreen() {
   );
 }
 
-function RatingCta({ experienceId }: { experienceId: string }) {
-  const activeProfile = useAuthStore((state) => state.activeProfile);
-  const { data: experience } = useExperience(experienceId);
-  if (!experience) return null;
+function PhotoThumbnail({
+  photo,
+  isCover,
+  onSetCover,
+  onRemove,
+}: {
+  photo: ExperiencePhoto;
+  isCover: boolean;
+  onSetCover: () => void;
+  onRemove: () => void;
+}) {
+  const { data: uri } = useSignedPhotoUrl(photo.storagePath);
+  return (
+    <View className="relative h-32 w-32 overflow-hidden rounded-lg bg-surface-container">
+      {uri ? <Image source={{ uri }} style={{ width: 128, height: 128 }} contentFit="cover" /> : null}
+      {isCover ? (
+        <View className="absolute left-1 top-1 rounded-full bg-primary-fixed px-1.5 py-0.5">
+          <Text className="font-jakarta-semibold text-label-sm text-on-primary-fixed">Portada</Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={onSetCover}
+          className="absolute left-1 top-1 rounded-full bg-surface-container-lowest/90 px-1.5 py-0.5"
+        >
+          <Text className="font-jakarta-semibold text-label-sm text-on-surface-variant">Usar de portada</Text>
+        </Pressable>
+      )}
+      <Pressable
+        onPress={onRemove}
+        className="absolute right-1 top-1 h-6 w-6 items-center justify-center rounded-full bg-surface-container-lowest/90"
+      >
+        <MaterialIcons name="close" size={14} color={colors.error} />
+      </Pressable>
+    </View>
+  );
+}
 
-  const status = getRatingStatus(experience, activeProfile);
+function RatingCta({ experienceId }: { experienceId: string }) {
+  const activatedProfile = useAuthStore((state) => state.activatedProfile);
+  const { data: experience } = useExperience(experienceId);
+  if (!experience || !activatedProfile) return null;
+
+  const status = getRatingStatus(experience, activatedProfile);
   if (status === 'awaiting-self') {
     return <PrimaryButton label="Puntuar esta cita" icon="favorite" onPress={() => router.push(`/experience/${experienceId}/rate`)} />;
   }

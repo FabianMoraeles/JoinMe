@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -10,21 +10,33 @@ import { requestNotificationPermissions } from '@/services/notifications';
 import { colors } from '@/theme/colors';
 import { PROFILES, useAuthStore, type ProfileKey } from '@/stores/use-auth-store';
 
-// Stand-in for plan_app_parejas.md §4 "Activación inicial" — a real build would confirm with a
-// private install key or a code from the other device before binding; here a tap + confirm
-// button plays that role since there's no live Supabase project to issue that code yet.
+// Real device activation (plan §4 "Activación inicial"): signs the device in anonymously and
+// binds it to the chosen profile server-side (see use-auth-store.ts's activateDevice). A real
+// build would also confirm with a private install key or a code from the other device before
+// binding — that confirmation step isn't implemented yet, just the tap + confirm here.
 export default function ActivationScreen() {
   const activatedProfile = useAuthStore((state) => state.activatedProfile);
   const activateDevice = useAuthStore((state) => state.activateDevice);
   const [selected, setSelected] = useState<ProfileKey | null>(null);
+  const [isActivating, setIsActivating] = useState(false);
 
   if (activatedProfile) return <Redirect href="/(tabs)" />;
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!selected) return;
-    activateDevice(selected);
-    void requestNotificationPermissions();
-    router.replace('/(tabs)');
+    setIsActivating(true);
+    try {
+      await activateDevice(selected);
+      void requestNotificationPermissions();
+      router.replace('/(tabs)');
+    } catch (error) {
+      Alert.alert(
+        'No se pudo activar el dispositivo',
+        error instanceof Error ? error.message : 'Intenta de nuevo.',
+      );
+    } finally {
+      setIsActivating(false);
+    }
   }
 
   return (
@@ -67,6 +79,7 @@ export default function ActivationScreen() {
           icon="lock"
           onPress={handleConfirm}
           disabled={!selected}
+          loading={isActivating}
         />
       </View>
     </SafeAreaView>

@@ -1,10 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-// Stand-in for the "device activation" flow in plan_app_parejas.md §5.1 — for now a profile is
-// bound to this device by picking it once in (activation)/index.tsx (persisted locally via
-// AsyncStorage) instead of via device_bindings + anonymous Supabase auth.
+import { supabase } from '@/services/supabase/client';
+
+// Real device activation (plan §5.1): picking a profile signs this device in anonymously and
+// binds it server-side via the activate_device RPC (supabase/migrations/0003_...). Persisted
+// locally via AsyncStorage so the binding survives app restarts without re-activating.
 export type ProfileKey = 'yesica' | 'fabian';
 
 export const PROFILES: Record<ProfileKey, { displayName: string; avatarUrl: string }> = {
@@ -24,33 +28,86 @@ export function partnerOf(profile: ProfileKey): ProfileKey {
   return profile === 'yesica' ? 'fabian' : 'yesica';
 }
 
+interface ActivateDeviceRow {
+  device_binding_id: string;
+  profile_id: string;
+  couple_id: string;
+  display_name: string;
+}
+
 interface AuthState {
-  /** Which profile this device was activated as. Null until activation finishes. */
+  /** Which profile this device was activated as. Null until activation finishes. Every real
+   * mutation is resolved server-side from the Supabase session tied to this profile — there's
+   * no client-side "view as the other profile" override anymore (that only ever worked against
+   * the single-device mock; a real device can only ever act as the profile it's bound to). */
   activatedProfile: ProfileKey | null;
-  /** Currently viewed-as profile — normally equal to activatedProfile, but can be toggled from
-   * the Perfil tab to preview the app as either side without re-running activation. */
-  activeProfile: ProfileKey;
+  deviceId: string | null;
+  deviceBindingId: string | null;
+  activatedProfileId: string | null;
+  coupleId: string | null;
   /** False until the persisted activation state has been read back from AsyncStorage. */
   hasHydrated: boolean;
-  activateDevice: (profile: ProfileKey) => void;
-  setActiveProfile: (profile: ProfileKey) => void;
-  revokeDevice: () => void;
+  activateDevice: (profile: ProfileKey) => Promise<void>;
+  revokeDevice: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activatedProfile: null,
-      activeProfile: 'yesica',
+      deviceId: null,
+      deviceBindingId: null,
+      activatedProfileId: null,
+      coupleId: null,
       hasHydrated: false,
-      activateDevice: (profile) => set({ activatedProfile: profile, activeProfile: profile }),
-      setActiveProfile: (profile) => set({ activeProfile: profile }),
-      revokeDevice: () => set({ activatedProfile: null }),
+
+      activateDevice: async (profile) => {
+        const deviceId = get().deviceId ?? Crypto.randomUUID();
+
+        const { error: signInError } = await supabase.auth.signInAnonymously();
+        if (signInError) throw signInError;
+
+        const { data, error } = await supabase.rpc('activate_device', {
+          p_fixed_profile_key: profile,
+          p_device_id: deviceId,
+          p_platform: Platform.OS,
+        });
+        if (error) throw error;
+
+        const row = (Array.isArray(data) ? data[0] : data) as ActivateDeviceRow | undefined;
+        if (!row) throw new Error('activate_device no devolvió ninguna fila');
+
+        set({
+          activatedProfile: profile,
+          deviceId,
+          deviceBindingId: row.device_binding_id,
+          activatedProfileId: row.profile_id,
+          coupleId: row.couple_id,
+        });
+      },
+
+      revokeDevice: async () => {
+        const bindingId = get().deviceBindingId;
+        if (bindingId) {
+          await supabase
+            .from('device_bindings')
+            .update({ status: 'revoked', revoked_at: new Date().toISOString() })
+            .eq('id', bindingId);
+        }
+        await supabase.auth.signOut();
+        set({ activatedProfile: null, deviceBindingId: null, activatedProfileId: null, coupleId: null });
+      },
     }),
     {
       name: 'joinme-device-activation',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ activatedProfile: state.activatedProfile }),
+      partialize: (state) => ({
+        activatedProfile: state.activatedProfile,
+        deviceId: state.deviceId,
+        deviceBindingId: state.deviceBindingId,
+        activatedProfileId: state.activatedProfileId,
+        coupleId: state.coupleId,
+      }),
       onRehydrateStorage: () => () => useAuthStore.setState({ hasHydrated: true }),
     },
   ),

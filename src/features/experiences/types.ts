@@ -24,14 +24,17 @@ export interface Place {
 
 export interface ExperiencePhoto {
   id: string;
-  uri: string;
-  uploadedBy: ProfileKey;
+  /** Path inside the private `experience-photos` Storage bucket — resolve a displayable URL
+   * with useSignedPhotoUrl() rather than rendering this directly. */
+  storagePath: string;
+  /** profiles.id of whoever uploaded it — opaque; nothing renders this, so it's never mapped
+   * back to a ProfileKey. */
+  uploadedBy: string;
 }
 
 export interface ExperienceRatingEntry {
   profileKey: ProfileKey;
   score: number; // 1-5
-  comment?: string;
   submittedAt: string; // ISO timestamp
 }
 
@@ -42,9 +45,10 @@ export interface Experience {
   status: ExperienceStatus;
   categoryId?: string;
   placeId?: string;
-  createdBy: ProfileKey;
-  plannedAt?: string; // ISO date
-  completedAt?: string; // ISO date
+  /** profiles.id of whoever created it — opaque, same reasoning as ExperiencePhoto.uploadedBy. */
+  createdBy: string;
+  plannedAt?: string; // AAAA-MM-DD
+  completedAt?: string; // AAAA-MM-DD
   budgetLevel?: BudgetLevel;
   photos: ExperiencePhoto[];
   coverPhotoId?: string;
@@ -65,7 +69,7 @@ export function getRatingStatus(experience: Experience, viewer: ProfileKey): Rat
 export interface Couple {
   name: string;
   photoUrl?: string;
-  relationshipStartedOn?: string; // ISO date
+  relationshipStartedOn?: string; // AAAA-MM-DD
   baseCity?: string;
 }
 

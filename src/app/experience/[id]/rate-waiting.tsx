@@ -1,31 +1,50 @@
+import { useEffect } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Pill } from '@/components/ui/pill';
 import { PrimaryButton } from '@/components/ui/primary-button';
-import { useExperience, usePlace, useSimulatePartnerRating } from '@/features/experiences/use-experiences';
+import { useExperience, usePlace } from '@/features/experiences/use-experiences';
+import { supabase } from '@/services/supabase/client';
 import { colors } from '@/theme/colors';
 import { PROFILES, partnerOf, useAuthStore } from '@/stores/use-auth-store';
 
 export default function RateWaitingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const activeProfile = useAuthStore((state) => state.activeProfile);
-  const partner = partnerOf(activeProfile);
+  const activatedProfile = useAuthStore((state) => state.activatedProfile);
   const { data: experience } = useExperience(id);
   const { data: place } = usePlace(experience?.placeId);
-  const { mutate: simulatePartnerRating, isPending } = useSimulatePartnerRating(id);
+  const queryClient = useQueryClient();
 
-  if (!experience) return null;
+  const bothRated = (experience?.ratings.length ?? 0) === 2;
 
-  const bothRated = experience.ratings.length === 2;
+  // Real-time unlock: the partner rates from their own device, Postgres broadcasts the insert
+  // (already filtered by ratings' own RLS — see supabase/migrations/0002_policies.sql), and this
+  // screen just refetches instead of the old single-device "simulate partner" button.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`ratings-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ratings', filter: `experience_id=eq.${id}` },
+        () => queryClient.invalidateQueries({ queryKey: ['experiences', 'detail', id] }),
+      )
+      .subscribe();
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [id, queryClient]);
 
-  function handleSimulatePartner() {
-    simulatePartnerRating(partner, {
-      onSuccess: () => router.replace(`/experience/${id}/rate-reveal`),
-    });
-  }
+  useEffect(() => {
+    if (bothRated) router.replace(`/experience/${id}/rate-reveal`);
+  }, [bothRated, id]);
+
+  if (!experience || !activatedProfile) return null;
+
+  const partner = partnerOf(activatedProfile);
 
   return (
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="pb-space-xl">
@@ -110,21 +129,12 @@ export default function RateWaitingScreen() {
           <Text className="font-jakarta text-body-md leading-relaxed text-on-surface-variant">
             En cuanto {PROFILES[partner].displayName} valore la noche en{' '}
             <Text className="font-jakarta-semibold text-on-surface">{place?.name ?? 'este lugar'}</Text>, descubrirán si
-            hubo sintonía total y se revelarán sus notas secretas.
+            hubo sintonía total y se revelarán sus notas secretas — esta pantalla se actualiza sola en cuanto eso
+            pase en su teléfono.
           </Text>
         </View>
 
-        <View className="gap-space-sm pt-space-xs">
-          <PrimaryButton label="Editar mi puntuación" icon="edit-note" variant="ghost" onPress={() => router.back()} />
-          {!bothRated ? (
-            <PrimaryButton
-              label="(Demo) Simular puntuación de la pareja"
-              icon="sync-alt"
-              onPress={handleSimulatePartner}
-              loading={isPending}
-            />
-          ) : null}
-        </View>
+        <PrimaryButton label="Editar mi puntuación" icon="edit-note" variant="ghost" onPress={() => router.back()} />
       </View>
     </ScrollView>
   );

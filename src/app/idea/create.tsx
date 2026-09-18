@@ -7,12 +7,10 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useCategories, useCreateIdea, usePlaces } from '@/features/experiences/use-experiences';
 import { ideaSchema, type IdeaFormValues } from '@/features/experiences/schemas';
-import { useAuthStore } from '@/stores/use-auth-store';
 
 const BUDGET_LABELS: Record<1 | 2 | 3, string> = { 1: '$', 2: '$$', 3: '$$$' };
 
 export default function CreateIdeaScreen() {
-  const activeProfile = useAuthStore((state) => state.activeProfile);
   const { data: categories } = useCategories();
   const { data: places } = usePlaces();
   const { mutate: createIdea, isPending } = useCreateIdea();
@@ -33,10 +31,7 @@ export default function CreateIdeaScreen() {
   const budgetLevel = watch('budgetLevel');
 
   function onSubmit(values: IdeaFormValues) {
-    createIdea(
-      { ...values, createdBy: activeProfile },
-      { onSuccess: () => router.back() },
-    );
+    createIdea(values, { onSuccess: () => router.back() });
   }
 
   return (

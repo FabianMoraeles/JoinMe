@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Pill } from '@/components/ui/pill';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { useExperience, usePlace } from '@/features/experiences/use-experiences';
+import { useExperience, usePlace, useSignedPhotoUrl } from '@/features/experiences/use-experiences';
 import { colors } from '@/theme/colors';
 import { PROFILES, type ProfileKey } from '@/stores/use-auth-store';
 
@@ -18,10 +18,11 @@ export default function RateRevealScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: experience } = useExperience(id);
   const { data: place } = usePlace(experience?.placeId);
+  const coverPhoto = experience?.photos.find((p) => p.id === experience.coverPhotoId) ?? experience?.photos[0];
+  const { data: coverPhotoUrl } = useSignedPhotoUrl(coverPhoto?.storagePath);
 
   if (!experience || experience.ratings.length < 2) return null;
 
-  const coverPhoto = experience.photos.find((p) => p.id === experience.coverPhotoId) ?? experience.photos[0];
   const [ratingA, ratingB] = experience.ratings;
   const average = (ratingA.score + ratingB.score) / 2;
   const harmony = Math.max(0, Math.round(100 - (Math.abs(ratingA.score - ratingB.score) / 5) * 100));
@@ -41,7 +42,7 @@ export default function RateRevealScreen() {
         </View>
 
         <View className="relative overflow-hidden rounded-lg bg-surface-container-low shadow-md">
-          <Image source={{ uri: coverPhoto?.uri ?? FALLBACK_PHOTO }} style={{ width: '100%', height: 224 }} contentFit="cover" />
+          <Image source={{ uri: coverPhotoUrl ?? FALLBACK_PHOTO }} style={{ width: '100%', height: 224 }} contentFit="cover" />
           <View className="absolute bottom-3 left-3 right-3 flex-row items-center justify-between">
             <View className="flex-row items-center gap-1.5 rounded-full bg-surface-container-lowest/90 px-3 py-1.5">
               <MaterialIcons name="calendar-today" size={16} color={colors.primary} />
@@ -75,7 +76,7 @@ export default function RateRevealScreen() {
 
           <View className="w-full flex-row gap-space-sm">
             {experience.ratings.map((rating) => (
-              <RatingColumn key={rating.profileKey} profileKey={rating.profileKey} score={rating.score} comment={rating.comment} />
+              <RatingColumn key={rating.profileKey} profileKey={rating.profileKey} score={rating.score} />
             ))}
           </View>
         </View>
@@ -108,7 +109,7 @@ export default function RateRevealScreen() {
   );
 }
 
-function RatingColumn({ profileKey, score, comment }: { profileKey: ProfileKey; score: number; comment?: string }) {
+function RatingColumn({ profileKey, score }: { profileKey: ProfileKey; score: number }) {
   const profile = PROFILES[profileKey];
   return (
     <View className="flex-1 items-center gap-2 rounded bg-surface-container-low p-3">
@@ -118,14 +119,6 @@ function RatingColumn({ profileKey, score, comment }: { profileKey: ProfileKey; 
         <Text className="font-jakarta-semibold text-title-md text-secondary">{score.toFixed(1)}</Text>
         <MaterialIcons name="favorite" size={16} color={colors.secondary} />
       </View>
-      {comment ? (
-        <Text
-          numberOfLines={3}
-          className="rounded bg-surface-container-lowest/80 p-2 text-center font-jakarta text-body-sm italic text-on-surface-variant"
-        >
-          «{comment}»
-        </Text>
-      ) : null}
     </View>
   );
 }

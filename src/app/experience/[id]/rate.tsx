@@ -8,7 +8,7 @@ import { HeartRatingInput } from '@/components/ui/heart-rating-input';
 import { Pill } from '@/components/ui/pill';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { useExperience, usePlace, useSubmitRating } from '@/features/experiences/use-experiences';
+import { useExperience, usePlace, useSignedPhotoUrl, useSubmitRating } from '@/features/experiences/use-experiences';
 import { PROFILES, partnerOf, useAuthStore } from '@/stores/use-auth-store';
 
 const SCALE_ROWS = [
@@ -24,31 +24,30 @@ const FALLBACK_PHOTO =
 
 export default function RateExperienceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const activeProfile = useAuthStore((state) => state.activeProfile);
-  const partner = partnerOf(activeProfile);
+  const activatedProfile = useAuthStore((state) => state.activatedProfile);
   const { data: experience } = useExperience(id);
   const { data: place } = usePlace(experience?.placeId);
   const { mutate: submitRating, isPending } = useSubmitRating(id);
   const [score, setScore] = useState(5);
 
-  if (!experience) return null;
+  const coverPhoto = experience?.photos.find((p) => p.id === experience.coverPhotoId) ?? experience?.photos[0];
+  const { data: coverPhotoUrl } = useSignedPhotoUrl(coverPhoto?.storagePath);
 
-  const coverPhoto = experience.photos.find((p) => p.id === experience.coverPhotoId) ?? experience.photos[0];
+  if (!experience || !activatedProfile) return null;
+
+  const partner = partnerOf(activatedProfile);
 
   function handleSubmit() {
-    submitRating(
-      { profileKey: activeProfile, score, submittedAt: new Date().toISOString() },
-      { onSuccess: () => router.replace(`/experience/${id}/rate-waiting`) },
-    );
+    submitRating({ score }, { onSuccess: () => router.replace(`/experience/${id}/rate-waiting`) });
   }
 
   return (
     <View className="flex-1 bg-surface">
-      <ScreenHeader title="Calificar Cita" avatarUri={PROFILES[activeProfile].avatarUrl} />
+      <ScreenHeader title="Calificar Cita" avatarUri={PROFILES[activatedProfile].avatarUrl} />
       <ScrollView contentContainerClassName="gap-space-lg px-margin pb-space-xl pt-space-md">
         <View className="overflow-hidden rounded-lg bg-surface-container-lowest shadow-sm">
           <View className="relative h-36 w-full">
-            <Image source={{ uri: coverPhoto?.uri ?? FALLBACK_PHOTO }} style={{ flex: 1 }} contentFit="cover" />
+            <Image source={{ uri: coverPhotoUrl ?? FALLBACK_PHOTO }} style={{ flex: 1 }} contentFit="cover" />
             <View className="absolute bottom-3 left-4 right-4 gap-1">
               <Pill label="Voto Secreto" icon="lock" tone="primary" />
               <Text className="font-jakarta-bold text-headline-md text-white">{experience.title}</Text>
@@ -59,10 +58,10 @@ export default function RateExperienceScreen() {
           </View>
           <View className="flex-row items-center justify-between bg-surface-container-low px-4 py-3">
             <View className="flex-row items-center gap-2.5">
-              <Avatar uri={PROFILES[activeProfile].avatarUrl} size={28} />
+              <Avatar uri={PROFILES[activatedProfile].avatarUrl} size={28} />
               <View>
                 <Text className="font-jakarta-semibold text-label-md text-secondary">
-                  Puntuando como {PROFILES[activeProfile].displayName}
+                  Puntuando como {PROFILES[activatedProfile].displayName}
                 </Text>
                 <Text className="font-jakarta text-label-sm text-on-surface-variant">Tu veredicto privado</Text>
               </View>
