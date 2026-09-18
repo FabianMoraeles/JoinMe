@@ -75,6 +75,24 @@ create policy "experience_photos_all_couple" on experience_photos
     experience_id in (select id from experiences where couple_id in (select public.current_couple_ids()))
   );
 
+-- Whether the caller has already rated this experience — SECURITY DEFINER so its internal
+-- lookup bypasses RLS on ratings. Without this, a policy on `ratings` that queries `ratings`
+-- itself in its own USING clause makes Postgres re-apply that same policy to the subquery,
+-- which needs the outer policy's answer to proceed: infinite recursion (error 42P17).
+create or replace function public.has_rated(p_experience_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from ratings
+    where ratings.experience_id = p_experience_id
+      and ratings.profile_id in (select public.current_profile_ids())
+  );
+$$;
+
 -- ratings: the hidden-score rule (§5.10), enforced at the DB layer, not just in the client.
 -- You can always see your own row. You can see your partner's row for an experience only
 -- once you have submitted your own rating for that same experience.
@@ -83,11 +101,7 @@ create policy "ratings_select_after_self_rated" on ratings
     experience_id in (select id from experiences where couple_id in (select public.current_couple_ids()))
     and (
       profile_id in (select public.current_profile_ids())
-      or exists (
-        select 1 from ratings self_rating
-        where self_rating.experience_id = ratings.experience_id
-          and self_rating.profile_id in (select public.current_profile_ids())
-      )
+      or public.has_rated(experience_id)
     )
   );
 

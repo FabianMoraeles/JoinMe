@@ -13,7 +13,11 @@ import { sendLocalNotification } from '@/services/notifications';
 import { supabase } from '@/services/supabase/client';
 import { useAuthStore, type ProfileKey } from '@/stores/use-auth-store';
 
-const EXPERIENCE_SELECT = '*, experience_photos(*), ratings(*, profiles(fixed_profile_key))';
+// `experiences` has two FKs to experience_photos (experience_id, and cover_photo_id going the
+// other way), so PostgREST can't infer which one a bare `experience_photos(*)` means — this
+// silently failed every read (HTTP 300, ambiguous embed) until the FK name pinned it down.
+const EXPERIENCE_SELECT =
+  '*, experience_photos!experience_photos_experience_id_fkey(*), ratings(*, profiles(fixed_profile_key))';
 
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   newPlan: true,

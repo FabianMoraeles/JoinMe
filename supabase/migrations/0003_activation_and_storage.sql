@@ -21,9 +21,9 @@ declare
   v_display_name text;
   v_binding_id uuid;
 begin
-  select id, display_name into v_profile_id, v_display_name
-  from profiles
-  where fixed_profile_key = p_fixed_profile_key;
+  select p.id, p.display_name into v_profile_id, v_display_name
+  from profiles p
+  where p.fixed_profile_key = p_fixed_profile_key;
 
   if v_profile_id is null then
     raise exception 'Unknown fixed_profile_key: %', p_fixed_profile_key;
