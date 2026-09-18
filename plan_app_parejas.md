@@ -1,8 +1,8 @@
-# Plan de desarrollo — App de citas y recuerdos para parejas
+# JoinMe — Plan de desarrollo
 
 ## 1. Visión del producto
 
-Aplicación móvil privada para dos personas que permite:
+**JoinMe** es una aplicación móvil privada para dos personas que permite:
 
 - Registrar en un mapa real los lugares donde tuvieron citas.
 - Conservar el título, la descripción, la fecha y las fotografías de cada cita.
@@ -12,11 +12,11 @@ Aplicación móvil privada para dos personas que permite:
 - Consultar la **Huella** de la relación mediante estadísticas y visualizaciones.
 - Personalizar los perfiles individuales y el perfil compartido de la pareja.
 
-La experiencia principal del producto será:
+La experiencia principal de JoinMe será:
 
 > **Idea → Plan → Cita realizada → Recuerdo en el mapa → Huella**
 
-La primera versión estará configurada exclusivamente para **Yesica y Fabián**. No mostrará registro, inicio de sesión, creación de parejas ni invitaciones. Aun así, la base de datos y las reglas de acceso conservarán una arquitectura compatible con múltiples usuarios y parejas para facilitar una futura publicación comercial.
+La primera versión de JoinMe estará configurada exclusivamente para **Yesica y Fabián**. No mostrará registro, inicio de sesión, creación de parejas ni invitaciones. Aun así, la base de datos y las reglas de acceso conservarán una arquitectura compatible con múltiples usuarios y parejas para facilitar una futura publicación comercial.
 
 ### Estrategia personal primero, producción después
 
@@ -26,7 +26,7 @@ La primera versión estará configurada exclusivamente para **Yesica y Fabián**
 - No se solicitarán correo electrónico ni contraseña.
 - La pareja y sus dos integrantes se crearán mediante datos iniciales controlados.
 - Todas las tablas seguirán asociadas a `couple_id` y `profile_id`.
-- Las políticas de seguridad se implementarán como si la aplicación ya fuera multiusuario.
+- Las políticas de seguridad se implementarán como si JoinMe ya fuera multiusuario.
 - El módulo futuro de registro podrá activarse sin cambiar el modelo principal de datos.
 - Una identidad anónima podrá enlazarse posteriormente con correo, Apple o Google sin perder los recuerdos existentes.
 
@@ -109,7 +109,7 @@ La selección de perfil solo se realizará durante la activación de un disposit
 
 ### Navegación principal
 
-La aplicación tendrá cuatro pestañas:
+JoinMe tendrá cuatro pestañas:
 
 1. **Mapa**
 2. **Ideas**
@@ -285,7 +285,7 @@ Reglas:
 - Una puntuación puede editarse mientras la otra persona no haya respondido.
 - Las modificaciones posteriores a la revelación deben quedar indicadas.
 
-La protección se implementará en la base de datos mediante una función segura. La aplicación cliente no recibirá anticipadamente la puntuación oculta.
+La protección se implementará en la base de datos mediante una función segura. El cliente de JoinMe no recibirá anticipadamente la puntuación oculta.
 
 ### 5.11 Huella
 
@@ -499,8 +499,8 @@ created_at
 - Todas las tablas deberán usar Row Level Security.
 - Una identidad técnica solo podrá consultar datos pertenecientes a la pareja de Yesica y Fabián.
 - La selección visual de un perfil no será suficiente para obtener acceso; deberá existir una asociación válida en `device_bindings`.
-- Las claves administrativas nunca se incluirán dentro de la aplicación móvil.
-- Las rutas protegidas de la aplicación no sustituirán las políticas de la base de datos.
+- Las claves administrativas nunca se incluirán dentro de JoinMe.
+- Las rutas protegidas de JoinMe no sustituirán las políticas de la base de datos.
 - Los buckets de fotografías tendrán políticas equivalentes.
 - Las operaciones sensibles se realizarán mediante funciones de base de datos.
 
@@ -578,7 +578,7 @@ supabase/
 
 ### Fase 1 — Definición del producto
 
-- Definir el nombre provisional.
+- Nombre definido: **JoinMe**.
 - Definir identidad visual y tono.
 - Crear el mapa de navegación.
 - Diseñar los flujos principales.
@@ -718,7 +718,7 @@ supabase/
 
 El producto deberá validarse siguiendo este recorrido:
 
-1. Abrir la aplicación en un dispositivo nuevo.
+1. Abrir JoinMe en un dispositivo nuevo.
 2. Seleccionar Yesica o Fabián.
 3. Confirmar la activación privada del dispositivo.
 4. Personalizar el perfil.
@@ -771,7 +771,7 @@ El MVP estará completo cuando:
 12. Recomendaciones de citas.
 13. Integraciones externas.
 
-## 13. Ruta de transición a producto público
+## 13. Ruta de transición de JoinMe a producto público
 
 La publicación futura deberá consistir principalmente en activar módulos ya previstos, no en rediseñar el núcleo.
 
@@ -800,6 +800,6 @@ La publicación futura deberá consistir principalmente en activar módulos ya p
 ### Negocio
 
 - Definir funciones gratuitas y premium.
-- Implementar compras dentro de la aplicación.
+- Implementar compras dentro de JoinMe.
 - Añadir métricas de producto respetando la privacidad.
 - Preparar soporte, reportes y moderación de contenido.
